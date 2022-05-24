@@ -1,0 +1,345 @@
+C51 COMPILER V9.55   MAIN                                                                  05/07/2022 18:23:35 PAGE 1   
+
+
+C51 COMPILER V9.55, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: E:\Keil_v5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          #include <reg51.h>  
+   2          #include "lcd.h"
+   3          #include <intrins.h> 
+   4          #define uchar unsigned char
+   5          #define uint unsigned int
+   6          #define ulong unsigned long
+   7          #define NACK  0
+   8          #define ACK   1
+   9          #define MEASURE_TEMP  0x03  //000 0001  1
+  10          #define MEASURE_HUMI  0x05  //000 0010  1
+  11          #define STATUS_REG_W  0x06  //000 0011  0
+  12          #define STATUS_REG_R  0x07  //000 0011  1
+  13          #define RESET     0x1E  //000 1111  0
+  14          ulong volt;//²âÁ¿µÄµçÑ¹Öµ
+  15          sbit Data=P2^3;   //¶¨ÒåÊý¾ÝÏß
+  16          sbit CLK=P3^3;//¶¨ÒåÊ±ÖÓÐÅºÅ¿Ú
+  17          sbit DIN=P3^1;//¶¨Òå2543Êý¾ÝÐ´Èë¿Ú
+  18          sbit DOUT=P3^0;//¶¨Òå2543Êý¾Ý¶ÁÈ¡¿Ú
+  19          sbit CS=P3^2;//¶¨Òå2543Æ¬Ñ¡ÐÅºÅ¿Ú
+  20          sbit Data_P    = P2^4;      // SHT11´«¸ÐÆ÷µÄÊý¾Ý¹Ü½Å
+  21          sbit Sck_P     = P2^3;      // SHT11´«¸ÐÆ÷µÄÊ±ÖÓ¹Ü½Å
+  22          
+  23          sbit BEEP =P2^5;//·äÃùÆ÷Òý½Å
+  24          sbit Fan = P1^0;//·çÉÈÒý½Å
+  25          sbit Win = P1^1;//´°Á±Òý½Å
+  26          sbit Water = P3^5;//Ë®±ÃÒý½Å
+  27          
+  28          uchar tmpe,h;
+  29          uchar rec_dat[9];   //ÓÃÓÚÏÔÊ¾µÄ½ÓÊÕÊý¾ÝÊý×é
+  30          uchar temp_max = 30;
+  31          uchar humi_min = 60;
+  32          ulong C2_max = 3500000;
+  33          ulong C2_now = 0;
+  34          
+  35          unsigned char temp;             // ±£´æÎÂ¶È
+  36          unsigned char humi;             // ±£´æÊª¶È
+  37          
+  38          enum { TEMP,HUMI };
+  39          typedef union                 //¶¨Òå¹²ÓÃÍ¬ÀàÐÍ
+  40          {
+  41            unsigned int i;
+  42            float f;
+  43          }value;
+  44          
+  45          
+  46          int display = 0;
+  47          void delay(uchar ms) 
+  48          {  // ÑÓÊ±×Ó³ÌÐò 
+  49   1      uchar i; 
+  50   1      while(ms--) 
+  51   1      { 
+  52   2        for(i = 0;i<250;i++);  
+  53   2      } 
+  54   1      }
+  55          
+C51 COMPILER V9.55   MAIN                                                                  05/07/2022 18:23:35 PAGE 2   
+
+  56          char ShtWriteByte(unsigned char value)
+  57          {
+  58   1        unsigned char i,error=0;
+  59   1        for(i=128;i>0;i>>=1)  // ¸ßÎ»Îª1£¬Ñ­»·ÓÒÒÆ
+  60   1        {
+  61   2          if (i&value)
+  62   2            Data_P=1;         // ºÍÒª·¢ËÍµÄÊýÏàÓë£¬½á¹ûÎª·¢ËÍµÄÎ»
+  63   2          else
+  64   2            Data_P=0;
+  65   2          Sck_P=1;
+  66   2          _nop_();            // ÑÓÊ±3us
+  67   2          _nop_();
+  68   2          _nop_();
+  69   2          Sck_P=0;
+  70   2        }
+  71   1        Data_P=1;             // ÊÍ·ÅÊý¾ÝÏß
+  72   1        Sck_P=1;
+  73   1        error=Data_P;         // ¼ì²éÓ¦´ðÐÅºÅ£¬È·ÈÏÍ¨Ñ¶Õý³£
+  74   1        _nop_();
+  75   1        _nop_();
+  76   1        _nop_();
+  77   1        Sck_P=0;
+  78   1        Data_P=1;
+  79   1        return error;         // error=1 Í¨Ñ¶´íÎó
+  80   1      }
+  81          
+  82          char ShtReadByte(unsigned char ack)
+  83          {
+  84   1        unsigned char i,val=0;
+  85   1        Data_P=1;             // ÊÍ·ÅÊý¾ÝÏß
+  86   1        for(i=0x80;i>0;i>>=1) // ¸ßÎ»Îª1£¬Ñ­»·ÓÒÒÆ
+  87   1        {
+  88   2          Sck_P=1;
+  89   2          if(Data_P)
+  90   2            val=(val|i);      // ¶ÁÒ»Î»Êý¾ÝÏßµÄÖµ
+  91   2          Sck_P=0;
+  92   2        }
+  93   1        Data_P=!ack;          // Èç¹ûÊÇÐ£Ñé£¬¶ÁÈ¡Íêºó½áÊøÍ¨Ñ¶
+  94   1        Sck_P=1;
+  95   1        _nop_();              // ÑÓÊ±3us
+  96   1        _nop_();
+  97   1        _nop_();
+  98   1        Sck_P=0;
+  99   1        _nop_();
+ 100   1        _nop_();
+ 101   1        _nop_();
+ 102   1        Data_P=1;             // ÊÍ·ÅÊý¾ÝÏß
+ 103   1        return val;
+ 104   1      }
+ 105          
+ 106          
+ 107          void ShtTransStart(void)
+ 108          {
+ 109   1        Data_P=1;
+ 110   1        Sck_P=0;
+ 111   1        _nop_();
+ 112   1        Sck_P=1;
+ 113   1        _nop_();
+ 114   1        Data_P=0;
+ 115   1        _nop_();
+ 116   1        Sck_P=0;
+ 117   1        _nop_();
+C51 COMPILER V9.55   MAIN                                                                  05/07/2022 18:23:35 PAGE 3   
+
+ 118   1        _nop_();
+ 119   1        _nop_();
+ 120   1        Sck_P=1;
+ 121   1        _nop_();
+ 122   1        Data_P=1;
+ 123   1        _nop_();
+ 124   1        Sck_P=0;
+ 125   1      }
+ 126          
+ 127          void ShtConnectReset(void)
+ 128          {
+ 129   1        unsigned char i;
+ 130   1        Data_P=1;           //×¼±¸
+ 131   1        Sck_P=0;
+ 132   1        for(i=0;i<9;i++)    //DATA±£³Ö¸ß£¬SCKÊ±ÖÓ´¥·¢9´Î£¬·¢ËÍÆô¶¯´«Êä£¬Í¨Ñ¸¼´¸´Î»
+ 133   1        {
+ 134   2          Sck_P=1;
+ 135   2          Sck_P=0;
+ 136   2        }
+ 137   1        ShtTransStart();    //Æô¶¯´«Êä
+ 138   1      }
+ 139          
+ 140          char ShtMeasure(unsigned char *p_value, unsigned char *p_checksum, unsigned char mode)
+ 141          {
+ 142   1        unsigned error=0;
+ 143   1        unsigned int i;
+ 144   1        ShtTransStart();      // Æô¶¯´«Êä
+ 145   1        switch(mode)          // Ñ¡Ôñ·¢ËÍÃüÁî
+ 146   1        {
+ 147   2          case 1 :            // ²âÁ¿ÎÂ¶È
+ 148   2            error+=ShtWriteByte(0x03);
+ 149   2            break;
+ 150   2          case 2 :            // ²âÁ¿Êª¶È
+ 151   2            error+=ShtWriteByte(0x05);
+ 152   2            break;
+ 153   2          default:
+ 154   2            break;
+ 155   2        }
+ 156   1        for(i=0;i<65535;i++)
+ 157   1          if(Data_P==0)
+ 158   1            break;            // µÈ´ý²âÁ¿½áÊø
+ 159   1          if(Data_P)
+ 160   1            error+=1;         // Èç¹û³¤Ê±¼äÊý¾ÝÏßÃ»ÓÐÀ­µÍ£¬ËµÃ÷²âÁ¿´íÎó
+ 161   1        *(p_value) =ShtReadByte(1);     // ¶ÁµÚÒ»¸ö×Ö½Ú£¬¸ß×Ö½Ú (MSB)
+ 162   1        *(p_value+1)=ShtReadByte(1);    // ¶ÁµÚ¶þ¸ö×Ö½Ú£¬µÍ×Ö½Ú (LSB)
+ 163   1        *p_checksum =ShtReadByte(0);    // read CRCÐ£ÑéÂë
+ 164   1        return error;                   // error=1 Í¨Ñ¶´íÎó
+ 165   1      }
+ 166          
+ 167          void CalcSHT11(float *p_humidity ,float *p_temperature)
+ 168          {
+ 169   1        const float C1=-4.0;        // 12Î»Êª¶È¾«¶È ÐÞÕý¹«Ê½
+ 170   1        const float C2=+0.0405;     // 12Î»Êª¶È¾«¶È ÐÞÕý¹«Ê½
+ 171   1        const float C3=-0.0000028;  // 12Î»Êª¶È¾«¶È ÐÞÕý¹«Ê½
+ 172   1        const float T1=+0.01;       // 14Î»ÎÂ¶È¾«¶È 5VÌõ¼þ ÐÞÕý¹«Ê½
+ 173   1        const float T2=+0.00008;    // 14Î»ÎÂ¶È¾«¶È 5VÌõ¼þ ÐÞÕý¹«Ê½
+ 174   1        float rh=*p_humidity;       // rh: 12Î» Êª¶È
+ 175   1        float t=*p_temperature;     // t:  14Î» ÎÂ¶È
+ 176   1        float rh_lin;               // rh_lin: Êª¶È linearÖµ
+ 177   1        float rh_true;              // rh_true: Êª¶È tureÖµ
+ 178   1        float t_C;                  // t_C : ÎÂ¶È ¡æ
+ 179   1        t_C=t*0.01 - 40;            //²¹³¥ÎÂ¶È
+C51 COMPILER V9.55   MAIN                                                                  05/07/2022 18:23:35 PAGE 4   
+
+ 180   1        rh_lin=C3*rh*rh + C2*rh + C1;         //Ïà¶ÔÊª¶È·ÇÏßÐÔ²¹³¥
+ 181   1        rh_true=(t_C-25)*(T1+T2*rh)+rh_lin;   //Ïà¶ÔÊª¶È¶ÔÓÚÎÂ¶ÈÒÀÀµÐÔ²¹³¥
+ 182   1        *p_temperature=t_C;         //·µ»ØÎÂ¶È½á¹û
+ 183   1        *p_humidity=rh_true;        //·µ»ØÊª¶È½á¹û
+ 184   1      }
+ 185          
+ 186          unsigned char TempCorrect(int temp)
+ 187          {
+ 188   1        if(temp<0)  temp=0;
+ 189   1        if(temp>970)  temp=970;
+ 190   1        if(temp>235)  temp=temp+10;
+ 191   1        if(temp>555)  temp=temp+10;
+ 192   1        if(temp>875)  temp=temp+10;
+ 193   1        temp=(temp%1000)/10;
+ 194   1        return temp;
+ 195   1      }
+ 196          
+ 197          unsigned char HumiCorrect(unsigned int humi)
+ 198          {
+ 199   1        if(humi>999)  humi=999;
+ 200   1        if((humi>490)&&(humi<951))  humi=humi-10;
+ 201   1        humi=(humi%1000)/10;
+ 202   1        return humi+4;
+ 203   1      }
+ 204          
+ 205          void ReadShtData()
+ 206          {
+ 207   1        value humi_val,temp_val;    // ¶¨ÒåÁ½¸ö¹²Í¬Ìå£¬Ò»¸öÓÃÓÚÊª¶È£¬Ò»¸öÓÃÓÚÎÂ¶È
+ 208   1        unsigned char error;                // ÓÃÓÚ¼ìÑéÊÇ·ñ³öÏÖ´íÎó
+ 209   1        unsigned char checksum;             // CRC
+ 210   1        unsigned int temp1,humi1;           // ÁÙÊ±¶ÁÈ¡µ½µÄÎÂÊª¶ÈÊý¾Ý
+ 211   1      
+ 212   1        error=0;                    //³õÊ¼»¯error=0£¬¼´Ã»ÓÐ´íÎó
+ 213   1        error+=ShtMeasure((unsigned char*)&temp_val.i,&checksum,1);   //ÎÂ¶È²âÁ¿
+ 214   1        error+=ShtMeasure((unsigned char*)&humi_val.i,&checksum,2);   //Êª¶È²âÁ¿
+ 215   1      
+ 216   1        if(error!=0)                //Èç¹û·¢Éú´íÎó£¬ÏµÍ³¸´Î»
+ 217   1          ShtConnectReset();
+ 218   1        else
+ 219   1        {
+ 220   2          humi_val.f=(float)humi_val.i;         //×ª»»Îª¸¡µãÊý
+ 221   2          temp_val.f=(float)temp_val.i;         //×ª»»Îª¸¡µãÊý
+ 222   2          CalcSHT11(&humi_val.f,&temp_val.f);   //ÐÞÕýÏà¶ÔÊª¶È¼°ÎÂ¶È
+ 223   2          temp1=temp_val.f*10;
+ 224   2          temp=TempCorrect(temp1);
+ 225   2          humi1=humi_val.f*10-50;
+ 226   2          humi=HumiCorrect(humi1);
+ 227   2          humi1=humi1-1;
+ 228   2        }
+ 229   1      
+ 230   1      }
+ 231          
+ 232          
+ 233          void read2543(uchar addr)
+ 234          {
+ 235   1        uint ad=0;
+ 236   1        uchar i;
+ 237   1        CLK=0;
+ 238   1        CS=0;//Æ¬Ñ¡¶Î£¬Æô¶¯2543
+ 239   1        addr<<=4;//¶ÔµØÖ·Î»Ô¤´¦Àí
+ 240   1        for(i=0;i<12;i++) //12¸öÊ±ÖÓ×ßÍê£¬Íê³ÉÒ»´Î¶ÁÈ¡²âÁ¿
+ 241   1        {
+C51 COMPILER V9.55   MAIN                                                                  05/07/2022 18:23:35 PAGE 5   
+
+ 242   2          if(DOUT==1)
+ 243   2            ad=ad|0x01;//µ¥Æ¬»ú¶ÁÈ¡adÊý¾Ý
+ 244   2          DIN=addr&0x80;//2543¶ÁÈ¡²âÁ¿µØÖ·Î»
+ 245   2          CLK=1;
+ 246   2          ;;;//ºÜ¶ÌµÄÑÓÊ±
+ 247   2          CLK=0;//²úÉúÏÂ½µÑØ£¬²úÉúÊ±ÖÓÐÅºÅ
+ 248   2          ;;;
+ 249   2          addr<<=1;
+ 250   2          ad<<=1;//½«Êý¾ÝÒÆÎ»×¼±¸ÏÂÒ»Î»µÄ¶ÁÐ´
+ 251   2        }
+ 252   1        CS=1;//¹Ø2543
+ 253   1        ad>>=1;
+ 254   1        volt=ad;//È¡×ß×ª»»½á¹û
+ 255   1        volt=volt*1221;//Àý×ÓµÄÂúÁ¿³ÌÎª5V£¬×ª»»·Ö±çÂÊÎª12Î»£¨2µÄ12´Î·½=4096£© ¡£¼´×î´óÖµÊÇ4096£¬5/4096=1221mV,¼´À
+             -ý×ÓÖÐµÄ1V´ú±íÊµ¼Ê1221mV        
+ 256   1      }
+ 257          
+ 258          void main(void)
+ 259          {
+ 260   1        LcdInit();
+ 261   1        ShtConnectReset();
+ 262   1        DisplayListChar(0,0,"temp:");
+ 263   1        DisplayListChar(8,0,"humi:");
+ 264   1        //DisplayListChar(0,1,"LUX:");
+ 265   1        //DisplayOneChar(5,1,'.');
+ 266   1        DisplayListChar(0,1,"CO2:");
+ 267   1        DisplayOneChar(5,1,'.');
+ 268   1        while(1)
+ 269   1        {
+ 270   2          ReadShtData();
+ 271   2      
+ 272   2          DisplayOneChar(13,0,(char)(humi/10+'0'));
+ 273   2          DisplayOneChar(14,0,(char)(humi%10+'0'));
+ 274   2          DisplayOneChar(5,0,(char)(temp/10+'0'));
+ 275   2          DisplayOneChar(6,0,(char)(temp%10+'0'));
+ 276   2          
+ 277   2          //read2543(0);//µ÷ÓÃ2543Çý¶¯³ÌÐò²âÁ¿µØÖ·Îª
+ 278   2          //LUX_now=volt;
+ 279   2          //DisplayOneChar(4,1,(char)(volt/1000000+'0'));
+ 280   2          //DisplayOneChar(6,1,(char)((volt/100000)%10+'0'));
+ 281   2          //DisplayOneChar(7,1,(char)((volt/10000)%10+'0'));
+ 282   2          read2543(1);//µ÷ÓÃ2543Çý¶¯³ÌÐò²âÁ¿µØÖ·Îª
+ 283   2          C2_now=volt;
+ 284   2          DisplayOneChar(4,1,(char)(volt/1000000+'0'));
+ 285   2          DisplayOneChar(6,1,(char)((volt/100000)%10+'0'));
+ 286   2          DisplayOneChar(7,1,(char)((volt/10000)%10+'0'));
+ 287   2          
+ 288   2          if(C2_now>C2_max) //CO2Å¨¶È´óÓÚÉè¶¨µÄ×î´óÖµÊ± ¿ªÆô´°Á±µÄ¼ÌµçÆ÷  Í¬Ê±·äÃùÆ÷±¨¾¯
+ 289   2          {
+ 290   3            Win = 1;
+ 291   3            BEEP = 0;
+ 292   3          }
+ 293   2          else if(humi<humi_min)//Êª¶ÈÐ¡ÓÚÉè¶¨µÄ×îÐ¡ÖµÊ± ¿ªÆôË®±ÃµÄ¼ÌµçÆ÷  Í¬Ê±·äÃùÆ÷±¨¾¯
+ 294   2          {
+ 295   3            Water = 1;
+ 296   3            BEEP = 0;
+ 297   3          }
+ 298   2          else if(temp>temp_max)//ÎÂ¶È´óÓÚÉè¶¨µÄ×î´óÖµÊ± ¿ªÆô·çÉÈµÄ¼ÌµçÆ÷  Í¬Ê±·äÃùÆ÷±¨¾¯
+ 299   2          {
+ 300   3            Fan = 1;
+ 301   3            BEEP = 0;
+ 302   3          }
+C51 COMPILER V9.55   MAIN                                                                  05/07/2022 18:23:35 PAGE 6   
+
+ 303   2          else
+ 304   2          {
+ 305   3            BEEP = 1;//¹Ø±Õ·äÃùÆ÷
+ 306   3            Win = 0;
+ 307   3            Water = 0;
+ 308   3            Fan = 0;
+ 309   3          }
+ 310   2        }       
+ 311   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1372    ----
+   CONSTANT SIZE    =     17    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     29      65
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

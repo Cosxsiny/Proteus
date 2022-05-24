@@ -1,0 +1,22 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Project:</h2>
+C:\Users\asus\Desktop\project\DEMO\DEMO.uvproj
+Project File Date:  03/18/2019
+
+<h2>Output:</h2>
+Build target 'Target 1'
+assembling STARTUP.A51...
+compiling main.c...
+linking...
+*** WARNING L1: UNRESOLVED EXTERNAL SYMBOL
+    SYMBOL:  MAIN
+    MODULE:  E:\KELL4\C51\LIB\C51S.LIB (?C_INIT)
+*** WARNING L2: REFERENCE MADE TO UNRESOLVED EXTERNAL
+    SYMBOL:  MAIN
+    MODULE:  E:\KELL4\C51\LIB\C51S.LIB (?C_INIT)
+    ADDRESS: 0010H
+Program Size: data=9.0 xdata=0 code=144
+"DEMO" - 0 Error(s), 2 Warning(s).
