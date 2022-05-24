@@ -1,0 +1,6 @@
+".\Objects\main.obj",
+".\Objects\lcd1602.obj",
+".\Objects\ds18b20.obj",
+".\Objects\delay.obj" 
+TO ".\Objects\main" 
+PRINT(".\Listings\main.m51")

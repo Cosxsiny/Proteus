@@ -1,0 +1,90 @@
+C51 COMPILER V9.55   LCD1602                                                               05/10/2022 20:34:14 PAGE 1   
+
+
+C51 COMPILER V9.55, COMPILATION OF MODULE LCD1602
+OBJECT MODULE PLACED IN .\Objects\lcd1602.obj
+COMPILER INVOKED BY: E:\Keil_v5\C51\BIN\C51.EXE lcd1602.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\l
+                    -cd1602.lst) TABS(2) OBJECT(.\Objects\lcd1602.obj)
+
+line level    source
+
+   1          #include<reg51.h>
+   2          #include"lcd1602.h"
+   3          #include"delay.h"
+   4          
+   5          #define uchar unsigned char
+   6          #define uint unsigned int 
+   7          
+   8          sbit RS = P2^7;//1602数据/命令选择端（H：数据寄存器L：指令寄存器） 
+   9          sbit RW = P2^6;//1602读/写选择端 
+  10          sbit E  = P2^5;//1602使能信号端
+  11          
+  12          uchar code tab[]={'0','1','2','3','4','5','6','7','8','9'};//液晶显示
+  13          uchar tab1[]={"min:010  max:040"};//液晶第二行显示内容
+  14          uchar  str[8];
+  15          /******************************************************************/
+  16          /*                   LCD1602写命令操作                            */
+  17          /******************************************************************/
+  18          void WriteCommand(uchar com)
+  19          {
+  20   1        delay(5);//操作前短暂延时，保证信号稳定
+  21   1        E=0;
+  22   1        RS=0;
+  23   1        RW=0;
+  24   1      
+  25   1        P0=com;
+  26   1        E=1;
+  27   1        delay(5);
+  28   1        E=0;
+  29   1      }
+  30          /******************************************************************/
+  31          /*                   LCD1602写数据操作                            */
+  32          /******************************************************************/
+  33          void WriteData(uchar dat)
+  34          {
+  35   1        delay(5);  //操作前短暂延时，保证信号稳定
+  36   1        E=0;
+  37   1        RS=1;
+  38   1        RW=0;
+  39   1      
+  40   1        P0=dat;
+  41   1        E=1;
+  42   1        delay(5);
+  43   1        E=0;
+  44   1      }
+  45          /******************************************************************/
+  46          /*                   LCD1602初始化程序                            */
+  47          /******************************************************************/
+  48          void InitLcd()
+  49          {
+  50   1        uchar i;
+  51   1        delay(15);
+  52   1      //  WriteCommand(0x38); //display mode
+  53   1      //  WriteCommand(0x38); //display mode
+  54   1        WriteCommand(0x38); //display mode
+C51 COMPILER V9.55   LCD1602                                                               05/10/2022 20:34:14 PAGE 2   
+
+  55   1        WriteCommand(0x06); //显示光标移动位置
+  56   1        WriteCommand(0x0c); //显示开及光标设置
+  57   1        WriteCommand(0x01); //显示清屏
+  58   1        WriteCommand(0x80+0x40);//将光标移到第二行
+  59   1        for(i=0;i<16;i++)//显示初始化内容
+  60   1        {
+  61   2          WriteData(tab1[i]);
+  62   2          delay(10);
+  63   2        }
+  64   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    122    ----
+   CONSTANT SIZE    =     10    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     25       3
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
